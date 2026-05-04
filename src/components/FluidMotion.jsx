@@ -1,5 +1,5 @@
 // @ts-nocheck
-// ── FILE 7 / 10 : src/components/FluidMotion.jsx  (MOBILE FIXED) ─
+// FILE 7/10 — src/components/FluidMotion.jsx  ── v3 FINAL
 
 import { useRef, useState, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
@@ -8,185 +8,201 @@ import * as THREE from "three";
 import useStore from "../store/useThemeStore";
 import { IDENTITY, SKILL_MATRIX, STATUS_META } from "../config/identity";
 
-// ── Responsive breakpoints ────────────────────────────────────────
-const vw       = window.innerWidth;
-const isMobile = vw < 600;
-const isTablet = vw >= 600 && vw < 1024;
-
-const COLS  = isMobile ? 1 : isTablet ? 2 : 3;
-const CARD_W = isMobile ? Math.min(vw - 32, 340) : isTablet ? 280 : 276;
-const GAP    = 12;
-const GRID_W = COLS * CARD_W + (COLS - 1) * GAP;
+const VW       = window.innerWidth;
+const isMobile = VW < 700;
 
 // ── GLSL Wave Background ──────────────────────────────────────────
 const waveVert = /* glsl */`
-  varying vec2 vUv;
-  varying float vWave;
-  uniform float uTime;
+  varying vec2 vUv; varying float vWave; uniform float uTime;
   void main() {
-    vUv = uv;
-    vec3 p = position;
-    float w = sin(p.x*1.2+uTime*0.6)*0.18
-            + sin(p.y*1.8+uTime*0.4)*0.12
-            + sin((p.x+p.y)*0.9+uTime*0.3)*0.08;
-    p.z += w;
-    vWave = w;
+    vUv = uv; vec3 p = position;
+    float w = sin(p.x*1.1+uTime*0.5)*0.15 + sin(p.y*1.6+uTime*0.35)*0.10 + sin((p.x+p.y)*0.8+uTime*0.25)*0.07;
+    p.z += w; vWave = w;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p,1.0);
   }
 `;
 const waveFrag = /* glsl */`
-  varying vec2 vUv;
-  varying float vWave;
-  uniform float uTime;
+  varying vec2 vUv; varying float vWave; uniform float uTime;
   void main() {
-    vec3 deep   = vec3(0.01,0.04,0.12);
-    vec3 mid    = vec3(0.02,0.14,0.32);
-    vec3 bright = vec3(0.0,0.50,0.78);
-    float g  = smoothstep(0.0,1.0,vUv.y+vWave*0.3);
-    vec3 col = mix(deep,mix(mid,bright,g*0.6),g);
-    vec2 gr  = vUv*24.0;
-    vec2 gf  = fract(gr);
-    float ln = max(1.0-smoothstep(0.0,0.04,gf.x), 1.0-smoothstep(0.0,0.04,gf.y));
-    col     += vec3(0.0,0.55,0.9)*ln*(0.08+vWave*0.12);
-    float sp = pow(max(0.0,vWave*2.5),3.0)*0.4;
-    col     += vec3(sp*0.4,sp*0.8,sp);
-    gl_FragColor = vec4(col,1.0);
+    vec3 deep=vec3(0.01,0.04,0.14); vec3 mid=vec3(0.02,0.13,0.30); vec3 hi=vec3(0.0,0.48,0.76);
+    float g=smoothstep(0.0,1.0,vUv.y+vWave*0.3);
+    vec3 col=mix(deep,mix(mid,hi,g*0.55),g);
+    vec2 gf=fract(vUv*22.0);
+    float ln=max(1.0-smoothstep(0.0,0.045,gf.x),1.0-smoothstep(0.0,0.045,gf.y));
+    col+=vec3(0.0,0.5,0.9)*ln*(0.07+vWave*0.1);
+    float sp=pow(max(0.0,vWave*2.2),3.0)*0.35;
+    col+=vec3(sp*0.3,sp*0.7,sp);
+    gl_FragColor=vec4(col,1.0);
   }
 `;
 
 function WaveBackground() {
-  const matRef   = useRef();
-  const uniforms = useMemo(() => ({ uTime: { value: 0 } }), []);
-  useFrame(({ clock }) => {
-    if (matRef.current) matRef.current.uniforms.uTime.value = clock.getElapsedTime();
-  });
+  const mat  = useRef();
+  const u    = useMemo(() => ({ uTime: { value: 0 } }), []);
+  useFrame(({ clock }) => { if (mat.current) mat.current.uniforms.uTime.value = clock.getElapsedTime(); });
   return (
-    <mesh position={[0, 0, -8]} rotation={[-Math.PI * 0.12, 0, 0]}>
-      <planeGeometry args={[85, 52, isMobile ? 40 : 120, isMobile ? 30 : 80]} />
-      <shaderMaterial
-        ref={matRef}
-        vertexShader={waveVert}
-        fragmentShader={waveFrag}
-        uniforms={uniforms}
-        side={THREE.DoubleSide}
-      />
+    <mesh position={[0, 0, -9]} rotation={[-Math.PI * 0.1, 0, 0]}>
+      <planeGeometry args={[90, 55, isMobile ? 40 : 100, isMobile ? 28 : 70]} />
+      <shaderMaterial ref={mat} vertexShader={waveVert} fragmentShader={waveFrag} uniforms={u} side={THREE.DoubleSide} />
     </mesh>
   );
 }
 
-// ── Project Card ──────────────────────────────────────────────────
-function ProjectCard({ project }) {
-  const setSelected   = useStore((s) => s.setSelectedProject);
-  const sel           = useStore((s) => s.selectedProject);
-  const [hov, setHov] = useState(false);
-  const [ripples, setRipples] = useState([]);
-  const cardRef  = useRef();
-  const rippleId = useRef(0);
-  const isSel    = sel?.id === project.id;
-  const badge    = STATUS_META[project.status];
-  const hasLink  = project.link &&
-    !["ADD_LINK_LATER","UNDER_DEVELOPMENT","PLANNING_PHASE"].includes(project.link);
+// ── Full-screen project modal ─────────────────────────────────────
+function ProjectModal({ project, onClose }) {
+  const badge   = STATUS_META[project.status];
+  const hasLink = project.link && !["ADD_LINK_LATER","UNDER_DEVELOPMENT","PLANNING_PHASE"].includes(project.link);
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={onClose} style={{ position:"absolute", inset:0, background:"rgba(0,0,20,0.7)", backdropFilter:"blur(6px)" }} />
+      <div style={{
+        position:"relative", width:"100%", maxWidth:540,
+        maxHeight:"82vh", overflowY:"auto",
+        background:"linear-gradient(160deg,#06061a 0%,#0a0a22 100%)",
+        border:`1px solid ${project.color}55`,
+        borderRadius:"22px 22px 0 0",
+        padding:"24px 22px 36px",
+        fontFamily:"'Space Mono',monospace", color:"#fff",
+        boxShadow:`0 -10px 70px ${project.color}33`,
+      }}>
+        {/* Handle */}
+        <div style={{ width:40, height:4, background:"rgba(255,255,255,0.18)", borderRadius:2, margin:"0 auto 22px" }} />
 
-  const onMove = (e) => {
-    if (!cardRef.current || isMobile) return;
-    const r  = cardRef.current.getBoundingClientRect();
-    const id = rippleId.current++;
-    setRipples((prev) => [...prev.slice(-2), { id, x: e.clientX - r.left, y: e.clientY - r.top }]);
-    setTimeout(() => setRipples((prev) => prev.filter((rr) => rr.id !== id)), 900);
-  };
+        {/* Top row */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+          <span style={{ fontSize:10, color:badge.color, letterSpacing:"0.18em", fontWeight:700 }}>{badge.label}</span>
+          <button onClick={onClose} style={{ fontSize:20, color:"rgba(255,255,255,0.38)", background:"none", border:"none", cursor:"pointer", lineHeight:1 }}>✕</button>
+        </div>
+
+        <div style={{ fontSize:10, color:project.color, letterSpacing:"0.2em", textTransform:"uppercase", marginBottom:8 }}>{project.category}</div>
+        <h2 style={{ fontSize:isMobile?22:26, fontWeight:700, marginBottom:14, lineHeight:1.2, letterSpacing:"-0.02em" }}>{project.title}</h2>
+        <p style={{ fontSize:isMobile?13:14, color:"rgba(255,255,255,0.62)", lineHeight:1.82, marginBottom:18 }}>{project.description}</p>
+
+        {/* Logic quote */}
+        <div style={{ fontSize:isMobile?11:12, color:"rgba(255,255,255,0.38)", lineHeight:1.75, borderLeft:`3px solid ${project.color}55`, paddingLeft:14, marginBottom:22, fontStyle:"italic" }}>
+          {project.layers.logic}
+        </div>
+
+        {/* Tech */}
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:28 }}>
+          {project.tech.map(t=>(
+            <span key={t} style={{ fontSize:isMobile?11:12, padding:"6px 14px", border:`1px solid ${project.color}55`, borderRadius:30, color:project.color, background:`${project.color}14` }}>{t}</span>
+          ))}
+        </div>
+
+        {/* CTA */}
+        {hasLink
+          ? <a href={project.link} target="_blank" rel="noopener noreferrer" style={{ display:"block", textAlign:"center", fontSize:isMobile?13:14, color:"#000", fontWeight:700, background:project.color, borderRadius:14, padding:"16px 28px", textDecoration:"none", letterSpacing:"0.1em", textTransform:"uppercase", boxShadow:`0 4px 24px ${project.color}55` }}>View Live Project →</a>
+          : <div style={{ textAlign:"center", fontSize:12, color:"rgba(255,255,255,0.28)", letterSpacing:"0.14em", textTransform:"uppercase", padding:"16px", border:"1px solid rgba(255,255,255,0.1)", borderRadius:14 }}>
+              {project.status==="IN_PROGRESS"?"⟳ Under Development":"◌ Planned for Future"}
+            </div>
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── Project card (summary only — tap opens modal) ─────────────────
+function ProjectCard({ project }) {
+  const setSelected = useStore((s) => s.setSelectedProject);
+  const sel         = useStore((s) => s.selectedProject);
+  const [hov, setHov] = useState(false);
+  const isSel = sel?.id === project.id;
+  const badge = STATUS_META[project.status];
 
   return (
-    <div
-      ref={cardRef}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      onMouseMove={onMove}
-      onClick={() => setSelected(isSel ? null : project)}
-      style={{
-        position: "relative", overflow: "hidden",
-        borderRadius: 14, padding: "18px 18px",
-        cursor: "pointer", width: CARD_W,
-        background: hov || isSel
-          ? `linear-gradient(135deg,${project.color}28 0%,rgba(0,212,255,0.1) 100%)`
-          : "rgba(255,255,255,0.05)",
-        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-        border: `1px solid ${isSel ? project.color : hov ? project.color+"66" : "rgba(255,255,255,0.1)"}`,
-        boxShadow: isSel
-          ? `0 0 0 1px ${project.color}44, 0 8px 40px ${project.color}22`
-          : hov ? `0 4px 20px ${project.color}18` : "0 2px 10px rgba(0,0,0,0.3)",
-        transition: "all 0.35s cubic-bezier(0.23,1,0.32,1)",
-        transform: isSel ? "scale(1.01)" : hov ? "translateY(-2px)" : "translateY(0)",
-        fontFamily: "'Space Mono',monospace",
-      }}
-    >
-      {/* Ripples */}
-      {ripples.map((r) => (
-        <span key={r.id} style={{ position: "absolute", left: r.x, top: r.y, width: 0, height: 0, borderRadius: "50%", background: `${project.color}28`, transform: "translate(-50%,-50%)", animation: "ripple 0.9s ease-out forwards", pointerEvents: "none" }} />
-      ))}
+    <>
+      <div
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        onClick={() => setSelected(isSel ? null : project)}
+        style={{
+          borderRadius:16,
+          padding:"20px 20px",
+          cursor:"pointer",
+          background: hov
+            ? `linear-gradient(140deg,${project.color}28 0%,rgba(0,200,255,0.1) 100%)`
+            : "rgba(255,255,255,0.06)",
+          backdropFilter:"blur(22px)",
+          WebkitBackdropFilter:"blur(22px)",
+          border:`1px solid ${hov ? project.color+"77" : "rgba(255,255,255,0.1)"}`,
+          boxShadow: hov ? `0 6px 28px ${project.color}22` : "0 2px 12px rgba(0,0,0,0.35)",
+          transition:"all 0.3s cubic-bezier(0.23,1,0.32,1)",
+          transform: hov ? "translateY(-3px)" : "translateY(0)",
+          fontFamily:"'Space Mono',monospace",
+          position:"relative",
+          overflow:"hidden",
+        }}
+      >
+        {/* Colour accent top bar */}
+        <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background:`linear-gradient(90deg, ${project.color}, ${project.color}44)`, borderRadius:"16px 16px 0 0" }} />
 
-      <div style={{ position: "relative", zIndex: 1 }}>
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontSize: 8, letterSpacing: "0.16em", color: project.color, textTransform: "uppercase", padding: "3px 8px", border: `1px solid ${project.color}44`, borderRadius: 20 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10, marginTop:4 }}>
+          <div style={{ fontSize:8, color:project.color, letterSpacing:"0.16em", textTransform:"uppercase", padding:"3px 9px", border:`1px solid ${project.color}44`, borderRadius:20 }}>
             {project.category}
           </div>
-          <div style={{ fontSize: 8, color: badge.color, letterSpacing: "0.1em", flexShrink: 0 }}>{badge.label}</div>
+          <div style={{ fontSize:8, color:badge.color, letterSpacing:"0.1em", fontWeight:700, flexShrink:0, marginLeft:6 }}>{badge.label}</div>
         </div>
 
         {/* Title */}
-        <h3 style={{ fontSize: isMobile ? 15 : 14, color: "#fff", marginBottom: 8, lineHeight: 1.3, letterSpacing: "-0.01em" }}>
+        <h3 style={{ fontSize:isMobile?16:15, color:"#ffffff", marginBottom:8, lineHeight:1.3, letterSpacing:"-0.01em", fontWeight:700 }}>
           {project.title}
         </h3>
 
-        {/* Description */}
-        <p style={{
-          fontSize: isMobile ? 11 : 9,
-          color: "rgba(255,255,255,0.6)",
-          lineHeight: 1.75, marginBottom: 12,
-          display: isSel ? "block" : "-webkit-box",
-          WebkitLineClamp: isSel ? "unset" : 3,
-          WebkitBoxOrient: "vertical",
-          overflow: isSel ? "visible" : "hidden",
-        }}>
+        {/* Description — 2 lines */}
+        <p style={{ fontSize:isMobile?12:10, color:"rgba(255,255,255,0.58)", lineHeight:1.78, marginBottom:14, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>
           {project.description}
         </p>
 
         {/* Tech pills */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-          {project.tech.map((t) => (
-            <span key={t} style={{ fontSize: isMobile ? 9 : 7.5, color: "rgba(255,255,255,0.5)", padding: "3px 8px", background: "rgba(255,255,255,0.06)", borderRadius: 5, border: "1px solid rgba(255,255,255,0.1)" }}>{t}</span>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:16 }}>
+          {project.tech.slice(0, isMobile ? 3 : 5).map(t=>(
+            <span key={t} style={{ fontSize:isMobile?9:8, color:"rgba(255,255,255,0.48)", padding:"3px 8px", background:"rgba(255,255,255,0.06)", borderRadius:5, border:"1px solid rgba(255,255,255,0.1)" }}>{t}</span>
           ))}
+          {project.tech.length > (isMobile?3:5) && (
+            <span style={{ fontSize:isMobile?9:8, color:"rgba(255,255,255,0.3)", padding:"3px 8px" }}>+{project.tech.length-(isMobile?3:5)}</span>
+          )}
         </div>
 
-        {/* Expanded section */}
-        {isSel && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: isMobile ? 10 : 8, color: "rgba(255,255,255,0.38)", lineHeight: 1.7, borderLeft: `2px solid ${project.color}44`, paddingLeft: 10, marginBottom: 14 }}>
-              {project.layers.logic}
-            </div>
-            {hasLink
-              ? <a href={project.link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: isMobile ? 11 : 9, color: project.color, textDecoration: "none", letterSpacing: "0.12em", textTransform: "uppercase", borderBottom: `1px solid ${project.color}66`, paddingBottom: 2 }}>View Project →</a>
-              : <span style={{ fontSize: isMobile ? 10 : 8, color: "rgba(255,255,255,0.28)", letterSpacing: "0.1em", textTransform: "uppercase" }}>{project.status === "IN_PROGRESS" ? "In Development" : "Coming Soon"}</span>
-            }
-          </div>
-        )}
+        {/* CTA button — always visible */}
+        <div style={{
+          display:"inline-flex", alignItems:"center", gap:8,
+          fontSize:isMobile?12:10, color:project.color,
+          letterSpacing:"0.12em", textTransform:"uppercase",
+          padding:"8px 16px",
+          border:`1px solid ${project.color}66`,
+          borderRadius:30,
+          background:`${project.color}14`,
+          fontWeight:700,
+          transition:"all 0.25s",
+          boxShadow: hov ? `0 0 16px ${project.color}44` : "none",
+        }}>
+          View Details
+          <span style={{ fontSize:14 }}>→</span>
+        </div>
       </div>
-    </div>
+
+      {/* Modal */}
+      {isSel && (
+        <ProjectModal project={project} onClose={() => setSelected(null)} />
+      )}
+    </>
   );
 }
 
 // ── Skill row ─────────────────────────────────────────────────────
 function SkillGroup({ g }) {
   return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-        <div style={{ fontSize: isMobile ? 9 : 7.5, letterSpacing: "0.18em", color: g.color, textTransform: "uppercase", fontFamily: "'Space Mono',monospace" }}>{g.domain}</div>
-        <div style={{ flex: 1, minWidth: 20, height: 1, background: `${g.color}30` }} />
-        <div style={{ fontSize: isMobile ? 8 : 6.5, color: g.color, padding: "2px 7px", border: `1px solid ${g.color}40`, borderRadius: 10, fontFamily: "'Space Mono',monospace", letterSpacing: "0.1em", whiteSpace: "nowrap" }}>{g.tier}</div>
+    <div style={{ marginBottom:18 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10, flexWrap:"wrap" }}>
+        <span style={{ fontSize:isMobile?11:9, color:g.color, letterSpacing:"0.18em", textTransform:"uppercase", fontFamily:"'Space Mono',monospace", fontWeight:700 }}>{g.domain}</span>
+        <div style={{ flex:1, minWidth:16, height:1, background:`${g.color}35` }} />
+        <span style={{ fontSize:isMobile?9:8, color:g.color, padding:"3px 10px", border:`1px solid ${g.color}44`, borderRadius:20, fontFamily:"'Space Mono',monospace", letterSpacing:"0.1em", whiteSpace:"nowrap" }}>{g.tier}</span>
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {g.skills.map((s) => (
-          <span key={s} style={{ fontFamily: "'Space Mono',monospace", fontSize: isMobile ? 10 : 8, padding: "4px 10px", background: `${g.color}12`, border: `1px solid ${g.color}35`, borderRadius: 5, color: "rgba(255,255,255,0.72)", whiteSpace: "nowrap" }}>{s}</span>
+      <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
+        {g.skills.map(s=>(
+          <span key={s} style={{ fontFamily:"'Space Mono',monospace", fontSize:isMobile?11:9, padding:"5px 12px", background:`${g.color}14`, border:`1px solid ${g.color}38`, borderRadius:6, color:"rgba(255,255,255,0.78)", whiteSpace:"nowrap" }}>{s}</span>
         ))}
       </div>
     </div>
@@ -197,77 +213,66 @@ function SkillGroup({ g }) {
 export default function FluidMotion() {
   const projects = useStore((s) => s.projects);
 
-  // Calculate the distanceFactor to make content fill the screen nicely
-  const df = isMobile ? 6 : isTablet ? 12 : 18;
-
   return (
     <>
-      <color attach="background" args={["#03090f"]} />
-      <ambientLight intensity={0.4} color="#c8d8ff" />
+      <color attach="background" args={["#030810"]} />
+      <ambientLight intensity={0.45} color="#c0d0ff" />
       <WaveBackground />
-      <fogExp2 attach="fog" color="#020c1a" density={0.018} />
+      <fogExp2 attach="fog" color="#020b18" density={0.016} />
 
-      {/* ── Project grid — centred HTML overlay ────────────────── */}
-      <Html
-        center
-        position={[0, isMobile ? 2.5 : 1.6, 0]}
-        transform={false}
-        distanceFactor={df}
-        style={{
-          width: GRID_W,
-          pointerEvents: "all",
-          // Force centre on all screens
-          position: "fixed",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -54%)",
-          maxHeight: isMobile ? "60vh" : "65vh",
-          overflowY: "auto",
-          paddingBottom: 8,
-        }}
-      >
-        <style>{`
-          @keyframes ripple{0%{width:0;height:0;opacity:.6}100%{width:290px;height:290px;opacity:0}}
-          ::-webkit-scrollbar{width:3px}
-          ::-webkit-scrollbar-thumb{background:rgba(0,212,255,0.3);border-radius:2px}
-        `}</style>
-
-        {/* Header */}
-        <div style={{ fontFamily: "'Space Mono',monospace", textAlign: "center", marginBottom: isMobile ? 16 : 22, paddingTop: 8 }}>
-          <div style={{ fontSize: isMobile ? 10 : 8, letterSpacing: "0.3em", color: "#00d4ff99", textTransform: "uppercase", marginBottom: 6 }}>Selected Work</div>
-          <div style={{ fontSize: isMobile ? 22 : 20, color: "#fff", letterSpacing: "-0.02em", fontWeight: 700 }}>{IDENTITY.name}</div>
-          <div style={{ fontSize: isMobile ? 10 : 8, color: "rgba(255,255,255,0.32)", letterSpacing: "0.08em", marginTop: 6, lineHeight: 1.5 }}>{IDENTITY.tagline}</div>
-        </div>
-
-        {/* Cards */}
+      {/* Single Html overlay that owns the full page layout */}
+      <Html transform={false} style={{ pointerEvents:"none" }}>
         <div style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(${COLS}, ${CARD_W}px)`,
-          gap: `${GAP}px`,
-          justifyContent: "center",
+          position:"fixed",
+          inset:0,
+          display:"flex",
+          flexDirection:"column",
+          overflowY:"auto",
+          pointerEvents:"all",
+          fontFamily:"'Space Mono',monospace",
         }}>
-          {projects.map((p) => <ProjectCard key={p.id} project={p} />)}
-        </div>
-      </Html>
+          <style>{`
+            @keyframes ripple{0%{width:0;height:0;opacity:.55}100%{width:300px;height:300px;opacity:0}}
+            ::-webkit-scrollbar{width:4px}
+            ::-webkit-scrollbar-thumb{background:rgba(0,180,255,0.35);border-radius:2px}
+          `}</style>
 
-      {/* ── Skill matrix — bottom overlay ──────────────────────── */}
-      <Html
-        center
-        transform={false}
-        style={{
-          width: Math.min(GRID_W, vw - 24),
-          pointerEvents: "none",
-          position: "fixed",
-          bottom: isMobile ? 60 : 28,
-          left: "50%",
-          transform: "translateX(-50%)",
-        }}
-      >
-        <div style={{ background: "rgba(2,12,26,0.88)", backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: "1px solid rgba(0,212,255,0.15)", borderRadius: 14, padding: isMobile ? "16px 16px" : "18px 22px" }}>
-          <div style={{ fontFamily: "'Space Mono',monospace", fontSize: isMobile ? 9 : 7.5, letterSpacing: "0.28em", color: "#00d4ff88", textTransform: "uppercase", marginBottom: isMobile ? 14 : 12 }}>Skill Matrix</div>
-          {SKILL_MATRIX.map((g) => <SkillGroup key={g.domain} g={g} />)}
-          <div style={{ marginTop: 8, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.07)", fontFamily: "'Space Mono',monospace", fontSize: isMobile ? 9 : 7.5, color: "rgba(255,255,255,0.3)", letterSpacing: "0.08em" }}>
-            ⚡ {IDENTITY.fitness.philosophy} · {IDENTITY.fitness.focus}
+          {/* ── Page content ──────────────────────────────────────── */}
+          <div style={{ padding: isMobile ? "80px 16px 100px" : "80px 32px 120px", maxWidth:960, margin:"0 auto", width:"100%" }}>
+
+            {/* Header */}
+            <div style={{ textAlign:"center", marginBottom:isMobile?28:36 }}>
+              <div style={{ fontSize:isMobile?10:9, letterSpacing:"0.35em", color:"#00d4ff88", textTransform:"uppercase", marginBottom:8 }}>Selected Work</div>
+              <div style={{ fontSize:isMobile?28:32, color:"#fff", letterSpacing:"-0.025em", fontWeight:700, lineHeight:1 }}>{IDENTITY.name}</div>
+              <div style={{ fontSize:isMobile?11:10, color:"rgba(255,255,255,0.36)", letterSpacing:"0.08em", marginTop:10, lineHeight:1.6 }}>{IDENTITY.tagline}</div>
+            </div>
+
+            {/* Cards grid */}
+            <div style={{
+              display:"grid",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))",
+              gap: isMobile ? 14 : 18,
+              marginBottom: isMobile ? 28 : 36,
+            }}>
+              {projects.map(p => <ProjectCard key={p.id} project={p} />)}
+            </div>
+
+            {/* Skill matrix */}
+            <div style={{
+              background:"rgba(2,10,22,0.85)",
+              backdropFilter:"blur(20px)",
+              WebkitBackdropFilter:"blur(20px)",
+              border:"1px solid rgba(0,212,255,0.18)",
+              borderRadius:18,
+              padding: isMobile ? "20px 18px" : "26px 28px",
+            }}>
+              <div style={{ fontSize:isMobile?10:9, letterSpacing:"0.3em", color:"#00d4ff77", textTransform:"uppercase", marginBottom:isMobile?18:20, fontWeight:700 }}>Skill Matrix</div>
+              {SKILL_MATRIX.map(g => <SkillGroup key={g.domain} g={g} />)}
+              <div style={{ marginTop:14, paddingTop:14, borderTop:"1px solid rgba(255,255,255,0.07)", fontSize:isMobile?10:9, color:"rgba(255,255,255,0.3)", letterSpacing:"0.1em" }}>
+                ⚡ {IDENTITY.fitness.philosophy} · {IDENTITY.fitness.focus}
+              </div>
+            </div>
+
           </div>
         </div>
       </Html>
