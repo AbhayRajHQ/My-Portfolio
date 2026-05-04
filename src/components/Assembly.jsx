@@ -1,302 +1,258 @@
 // @ts-nocheck
-// ── FILE 8 / 10 : src/components/Assembly.jsx  (MOBILE FIXED) ────
+// FILE 8/10 — src/components/Assembly.jsx  ── v3 FINAL
 
 import { useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Html, Grid, Line } from "@react-three/drei";
+import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import useStore from "../store/useThemeStore";
 import { IDENTITY, STATUS_META } from "../config/identity";
 
-// ── Responsive ────────────────────────────────────────────────────
-const vw       = window.innerWidth;
-const isMobile = vw < 768;
+const VW       = window.innerWidth;
+const isMobile = VW < 768;
 
-// ── Layer definitions ─────────────────────────────────────────────
-const LAYER_DEFS = [
-  { key: "code",   label: "01 · CODE",   color: "#0088cc", yOff:  2.0, zOff:  0.8 },
-  { key: "design", label: "02 · DESIGN", color: "#338833", yOff:  0.7, zOff:  0.3 },
-  { key: "logic",  label: "03 · LOGIC",  color: "#cc4400", yOff: -0.7, zOff: -0.3 },
-  { key: "result", label: "04 · RESULT", color: "#993366", yOff: -2.0, zOff: -0.8 },
+// Layer config — colours are dark enough to read on white background
+const LAYERS = [
+  { key:"code",   label:"01 · CODE",   color:"#0055aa", lightBg:"#e8f0ff", barColor:"#0055aa" },
+  { key:"design", label:"02 · DESIGN", color:"#005522", lightBg:"#e6f5ec", barColor:"#007733" },
+  { key:"logic",  label:"03 · LOGIC",  color:"#882200", lightBg:"#fff0ea", barColor:"#cc3300" },
+  { key:"result", label:"04 · RESULT", color:"#550066", lightBg:"#f8eeff", barColor:"#8800aa" },
 ];
 
-// ── Single exploded layer slab ────────────────────────────────────
-function LayerSlab({ ld, content, isActive, onClick }) {
-  const [hov, setHov] = useState(false);
-  const meshRef = useRef();
-  const on      = isActive || hov;
-
-  useFrame(({ clock }) => {
-    if (!meshRef.current) return;
-    meshRef.current.position.y = Math.sin(clock.getElapsedTime() * 0.5 + ld.yOff) * 0.04;
-  });
-
-  // On mobile: no leader lines going far right, annotation goes below
-  const slabW = isMobile ? 3.2 : 3.8;
-
+// ── Single layer row ──────────────────────────────────────────────
+function LayerRow({ layer, content, isActive, onToggle }) {
   return (
-    <group position={[0, ld.yOff, ld.zOff]}>
-      {/* Slab */}
-      <mesh
-        ref={meshRef}
-        onPointerOver={() => setHov(true)}
-        onPointerOut ={() => setHov(false)}
-        onClick={onClick}
+    <div style={{ marginBottom:10 }}>
+      {/* Row button */}
+      <button
+        onClick={onToggle}
+        style={{
+          width:"100%", display:"flex", alignItems:"center", gap:12,
+          background: isActive ? layer.lightBg : "rgba(200,206,220,0.35)",
+          border:`1.5px solid ${isActive ? layer.color : "rgba(100,110,140,0.25)"}`,
+          borderRadius:10, padding: isMobile ? "13px 16px" : "11px 16px",
+          cursor:"pointer", textAlign:"left",
+          transition:"all 0.25s ease",
+          boxShadow: isActive ? `0 2px 14px ${layer.color}22` : "none",
+        }}
       >
-        <boxGeometry args={[slabW, 0.5, 0.07]} />
-        <meshPhysicalMaterial
-          color={on ? ld.color : "#b8bcc8"}
-          emissive={ld.color}
-          emissiveIntensity={on ? 0.18 : 0}
-          metalness={0.06} roughness={0.5}
-          transparent opacity={on ? 0.96 : 0.75}
-        />
-      </mesh>
+        {/* Colour pip */}
+        <div style={{ width:10, height:10, borderRadius:"50%", background:layer.barColor, flexShrink:0, boxShadow: isActive ? `0 0 8px ${layer.barColor}` : "none" }} />
 
-      {/* Layer label — DARK text on light slab, always readable */}
-      <Html
-        position={[-(slabW / 2) + 0.15, 0, 0.08]}
-        distanceFactor={isMobile ? 5 : 7}
-        style={{ pointerEvents: "none" }}
-      >
+        {/* Label */}
+        <span style={{ fontFamily:"'Space Mono',monospace", fontSize:isMobile?13:11, color:isActive ? layer.color : "#3a4258", letterSpacing:"0.1em", fontWeight:700, flex:1 }}>
+          {layer.label}
+        </span>
+
+        {/* Chevron */}
+        <span style={{ fontSize:14, color:isActive ? layer.color : "#8890a8", transition:"transform 0.25s", transform: isActive ? "rotate(180deg)" : "none", display:"inline-block" }}>▾</span>
+      </button>
+
+      {/* Expanded annotation */}
+      {isActive && (
         <div style={{
-          fontFamily: "'Space Mono',monospace",
-          fontSize: isMobile ? 11 : 9,
-          color: on ? "#ffffff" : "#2a3040",
-          letterSpacing: "0.1em",
-          whiteSpace: "nowrap",
-          fontWeight: on ? 700 : 400,
-          textShadow: on ? `0 0 8px ${ld.color}` : "none",
-          transition: "all 0.3s",
+          background: layer.lightBg,
+          borderLeft:`3px solid ${layer.barColor}`,
+          borderRadius:"0 0 10px 10px",
+          padding: isMobile ? "14px 16px 14px 18px" : "12px 16px 12px 18px",
+          fontFamily:"'Space Mono',monospace",
+          fontSize: isMobile ? 12 : 10,
+          color: layer.color,
+          lineHeight:1.78,
+          letterSpacing:"0.03em",
+          marginTop:-2,
         }}>
-          {ld.label}
+          {content}
         </div>
-      </Html>
-
-      {/* Leader line — only on desktop */}
-      {!isMobile && (
-        <>
-          <Line
-            points={[[slabW / 2, 0, 0], [slabW / 2 + 0.4, 0, 0], [slabW / 2 + 1.4, 0, 0]]}
-            color={on ? ld.color : "#9098ac"}
-            lineWidth={on ? 1.5 : 0.6}
-            dashed={!on} dashSize={0.07} gapSize={0.04}
-          />
-          <mesh position={[slabW / 2 + 1.4, 0, 0]}>
-            <circleGeometry args={[0.04, 16]} />
-            <meshBasicMaterial color={on ? ld.color : "#9098ac"} />
-          </mesh>
-          <Html
-            position={[slabW / 2 + 1.55, 0, 0]}
-            distanceFactor={7}
-            style={{ width: 190, pointerEvents: "none" }}
-          >
-            <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 8, color: on ? ld.color : "#505870", lineHeight: 1.6, letterSpacing: "0.04em", borderLeft: `2px solid ${on ? ld.color : "#c0c6d4"}`, paddingLeft: 8, transition: "color 0.3s, border-color 0.3s" }}>
-              {content}
-            </div>
-          </Html>
-        </>
       )}
-
-      {/* Mobile: annotation appears below when active */}
-      {isMobile && on && (
-        <Html position={[0, -0.55, 0]} distanceFactor={5} style={{ width: 260, pointerEvents: "none" }}>
-          <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 9, color: "#1a2030", lineHeight: 1.65, letterSpacing: "0.04em", background: "rgba(255,255,255,0.92)", borderLeft: `3px solid ${ld.color}`, paddingLeft: 10, paddingTop: 5, paddingBottom: 5, borderRadius: "0 6px 6px 0", boxShadow: "0 2px 12px rgba(0,0,0,0.1)" }}>
-            {content}
-          </div>
-        </Html>
-      )}
-    </group>
+    </div>
   );
 }
 
-// ── Full exploded card ────────────────────────────────────────────
-function ExplodedCard({ project, position }) {
+// ── Project detail sheet ──────────────────────────────────────────
+function ProjectSheet({ project, onClose, onPrev, onNext, idx, total }) {
   const [activeLayer, setActiveLayer] = useState(null);
-  const groupRef   = useRef();
-  const hasLink    = project.link &&
-    !["ADD_LINK_LATER","UNDER_DEVELOPMENT","PLANNING_PHASE"].includes(project.link);
-  const statusMeta = STATUS_META[project.status];
-
-  useFrame(({ clock }) => {
-    if (!groupRef.current) return;
-    groupRef.current.rotation.y = Math.sin(clock.getElapsedTime() * 0.15) * 0.04;
-  });
-
-  const titleX = isMobile ? -1.4 : -1.6;
+  const badge   = STATUS_META[project.status];
+  const hasLink = project.link && !["ADD_LINK_LATER","UNDER_DEVELOPMENT","PLANNING_PHASE"].includes(project.link);
 
   return (
-    <group ref={groupRef} position={position}>
-      {/* Title plate */}
-      <mesh position={[0, 3.0, 0]}>
-        <planeGeometry args={[isMobile ? 3.2 : 3.8, 0.85]} />
-        <meshBasicMaterial color={project.color} transparent opacity={0.1} />
-      </mesh>
-
-      {/* Status dot */}
-      <mesh position={[isMobile ? 1.4 : 1.75, 3.12, 0.01]}>
-        <circleGeometry args={[0.07, 24]} />
-        <meshBasicMaterial color={statusMeta.color} />
-      </mesh>
-
-      {/* Title — dark readable text on light bg */}
-      <Html position={[titleX, 3.08, 0.02]} distanceFactor={isMobile ? 5 : 7} style={{ pointerEvents: "none" }}>
-        <div style={{ fontFamily: "'Space Mono',monospace" }}>
-          <div style={{ fontSize: isMobile ? 17 : 16, color: project.color, fontWeight: 700, letterSpacing: "-0.01em", marginBottom: 3, textShadow: "0 1px 3px rgba(0,0,0,0.15)" }}>
-            {project.title}
-          </div>
-          <div style={{ fontSize: isMobile ? 9 : 8, color: "#444c60", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            {project.category}
+    <div style={{
+      background:"#f4f6fa",
+      borderRadius:20,
+      overflow:"hidden",
+      boxShadow:"0 8px 60px rgba(0,0,0,0.18)",
+      border:"1px solid rgba(100,110,140,0.2)",
+      fontFamily:"'Space Mono',monospace",
+      maxWidth:560,
+      margin:"0 auto",
+      width:"100%",
+    }}>
+      {/* Colour header strip */}
+      <div style={{ background:`linear-gradient(120deg, ${project.color} 0%, ${project.color}bb 100%)`, padding: isMobile?"20px 20px 18px":"22px 24px 20px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+          <span style={{ fontSize:9, color:"rgba(255,255,255,0.8)", letterSpacing:"0.22em", textTransform:"uppercase", background:"rgba(0,0,0,0.25)", padding:"3px 10px", borderRadius:20 }}>
+            {badge.label.replace(/[●◑○] /,"")}
+          </span>
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <span style={{ fontSize:10, color:"rgba(255,255,255,0.7)", letterSpacing:"0.1em" }}>
+              {String(idx+1).padStart(2,"0")} / {String(total).padStart(2,"0")}
+            </span>
           </div>
         </div>
-      </Html>
-
-      {/* Status badge */}
-      <Html position={[titleX, 2.55, 0]} distanceFactor={isMobile ? 5 : 7} style={{ pointerEvents: "none" }}>
-        <div style={{ fontFamily: "'Space Mono',monospace", fontSize: isMobile ? 10 : 8, color: statusMeta.color, letterSpacing: "0.16em", display: "flex", alignItems: "center", gap: 6, fontWeight: 700 }}>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", background: statusMeta.color, display: "inline-block", boxShadow: `0 0 6px ${statusMeta.color}` }} />
-          {statusMeta.label.replace(/[●◑○] /, "")}
+        <h2 style={{ fontSize:isMobile?22:24, color:"#fff", fontWeight:700, lineHeight:1.2, marginBottom:6, letterSpacing:"-0.02em" }}>
+          {project.title}
+        </h2>
+        <div style={{ fontSize:10, color:"rgba(255,255,255,0.75)", letterSpacing:"0.18em", textTransform:"uppercase" }}>
+          {project.category}
         </div>
-      </Html>
+      </div>
 
-      {/* Vertical spine */}
-      <Line points={[[0, 2.2, 0], [0, -2.4, 0]]} color="#8890a4" lineWidth={0.6} dashed dashSize={0.1} gapSize={0.06} />
+      {/* Body */}
+      <div style={{ padding: isMobile?"18px 18px 24px":"20px 24px 28px", overflowY:"auto", maxHeight: isMobile?"62vh":"68vh" }}>
 
-      {/* Four exploded layers */}
-      {LAYER_DEFS.map((ld) => (
-        <LayerSlab
-          key={ld.key} ld={ld}
-          content={project.layers[ld.key]}
-          isActive={activeLayer === ld.key}
-          onClick={() => setActiveLayer(activeLayer === ld.key ? null : ld.key)}
-        />
-      ))}
+        {/* Description */}
+        <p style={{ fontSize:isMobile?13:12, color:"#3a4258", lineHeight:1.82, marginBottom:20 }}>
+          {project.description}
+        </p>
 
-      {/* Tech tags */}
-      <Html
-        position={[titleX, -2.75, 0]}
-        distanceFactor={isMobile ? 5 : 7}
-        style={{ width: isMobile ? 280 : 340, pointerEvents: "none" }}
-      >
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, fontFamily: "'Space Mono',monospace" }}>
-          {project.tech.map((t) => (
-            <span key={t} style={{ fontSize: isMobile ? 9 : 7.5, padding: "3px 9px", border: `1px solid ${project.color}55`, borderRadius: 4, color: project.color, background: `${project.color}12`, fontWeight: 600 }}>{t}</span>
+        {/* Tech */}
+        <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginBottom:22 }}>
+          {project.tech.map(t=>(
+            <span key={t} style={{ fontSize:isMobile?11:10, padding:"5px 12px", border:`1.5px solid ${project.color}55`, borderRadius:30, color:project.color, background:`${project.color}12`, fontWeight:700 }}>{t}</span>
           ))}
         </div>
-      </Html>
 
-      {/* CTA */}
-      <Html position={[titleX, -3.35, 0]} distanceFactor={isMobile ? 5 : 7} style={{ pointerEvents: "all" }}>
-        {hasLink
-          ? <a href={project.link} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "'Space Mono',monospace", fontSize: isMobile ? 11 : 8.5, color: project.color, textDecoration: "none", letterSpacing: "0.12em", textTransform: "uppercase", borderBottom: `2px solid ${project.color}88`, paddingBottom: 2, fontWeight: 700 }}>View Live →</a>
-          : <span style={{ fontFamily: "'Space Mono',monospace", fontSize: isMobile ? 10 : 8, color: "#606878", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-              {project.status === "IN_PROGRESS" ? "⟳ In Development" : "◌ Planned"}
-            </span>
-        }
-      </Html>
-    </group>
+        {/* Layers heading */}
+        <div style={{ fontSize:9, letterSpacing:"0.28em", color:"#6870888", textTransform:"uppercase", marginBottom:12, color:"#7880a0" }}>
+          Tap a layer to inspect
+        </div>
+
+        {/* Four layers */}
+        {LAYERS.map(ld=>(
+          <LayerRow
+            key={ld.key}
+            layer={ld}
+            content={project.layers[ld.key]}
+            isActive={activeLayer===ld.key}
+            onToggle={()=>setActiveLayer(activeLayer===ld.key ? null : ld.key)}
+          />
+        ))}
+
+        {/* CTA */}
+        <div style={{ marginTop:22 }}>
+          {hasLink
+            ? <a href={project.link} target="_blank" rel="noopener noreferrer" style={{ display:"block", textAlign:"center", fontSize:isMobile?14:13, color:"#fff", fontWeight:700, background:project.color, borderRadius:14, padding:"16px 28px", textDecoration:"none", letterSpacing:"0.1em", textTransform:"uppercase", boxShadow:`0 4px 22px ${project.color}44` }}>
+                View Live Project →
+              </a>
+            : <div style={{ textAlign:"center", fontSize:12, color:"#8890a8", letterSpacing:"0.14em", textTransform:"uppercase", padding:"16px", border:"1.5px solid rgba(100,110,140,0.25)", borderRadius:14 }}>
+                {project.status==="IN_PROGRESS"?"⟳ Under Development":"◌ Planned for Future"}
+              </div>
+          }
+        </div>
+      </div>
+    </div>
   );
 }
 
-const CARD_SPACING = isMobile ? 8 : 11;
-
-// ── Assembly root ─────────────────────────────────────────────────
+// ── Assembly root — pure HTML layout on top of minimal 3D env ─────
 export default function Assembly() {
   const projects = useStore((s) => s.projects);
   const [idx, setIdx] = useState(0);
-  const groupRef = useRef();
+  const project = projects[idx];
 
-  useFrame(() => {
-    if (!groupRef.current) return;
-    groupRef.current.position.x = THREE.MathUtils.lerp(
-      groupRef.current.position.x,
-      -idx * CARD_SPACING,
-      0.07,
-    );
-  });
+  const prev = () => setIdx(i => Math.max(0, i-1));
+  const next = () => setIdx(i => Math.min(projects.length-1, i+1));
 
   return (
     <>
-      <color attach="background" args={["#eef0f4"]} />
-      <ambientLight intensity={2.2} color="#ffffff" />
-      <directionalLight position={[5, 10, 5]}   intensity={0.7} color="#e8eaf6" />
-      <directionalLight position={[-5, -3, -5]}  intensity={0.4} color="#c5cae9" />
-      {/* Extra fill light for text visibility */}
-      <ambientLight intensity={1.0} color="#dde0ea" />
+      {/* Minimal lab-white 3D environment */}
+      <color attach="background" args={["#edf0f5"]} />
+      <ambientLight intensity={2.5} color="#ffffff" />
+      <directionalLight position={[4, 8, 4]}   intensity={0.8} color="#e8eaf6" />
+      <directionalLight position={[-4, -4, -4]} intensity={0.4} color="#d0d4e8" />
 
-      <Grid
-        position={[0, -5, 0]} args={[200, 200]}
-        cellSize={1} cellThickness={0.3} cellColor="#b8bec8"
-        sectionSize={5} sectionThickness={0.6} sectionColor="#8890a4"
-        fadeDistance={isMobile ? 30 : 60} fadeStrength={1.5} infiniteGrid
-      />
+      {/* Grid floor */}
+      <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, -5, 0]}>
+        <planeGeometry args={[100, 100]} />
+        <meshBasicMaterial color="#dde0e8" transparent opacity={0.5} />
+      </mesh>
 
-      {/* Header — dark text on light background */}
-      <Html
-        position={[isMobile ? -3.5 : -8, isMobile ? 5.0 : 5.5, 0]}
-        style={{ pointerEvents: "none" }}
-        distanceFactor={isMobile ? 9 : 14}
-      >
-        <div style={{ fontFamily: "'Space Mono',monospace" }}>
-          <div style={{ fontSize: isMobile ? 9 : 8, letterSpacing: "0.3em", color: "#505870", textTransform: "uppercase", marginBottom: 5 }}>
-            Deconstruct · Exploded View
-          </div>
-          <div style={{ fontSize: isMobile ? 16 : 18, color: "#1a1a2e", letterSpacing: "-0.02em", fontWeight: 700 }}>
-            {IDENTITY.name} ·{" "}
-            <span style={{ color: projects[idx]?.color }}>
-              {projects[idx]?.title}
-            </span>
-          </div>
-          <div style={{ fontSize: isMobile ? 9 : 8, color: "#606878", letterSpacing: "0.08em", marginTop: 5 }}>
-            {isMobile ? "Tap a layer to inspect" : "Click any layer to annotate · use ← → to navigate"}
-          </div>
-        </div>
-      </Html>
+      {/* Subtle grid lines */}
+      {Array.from({length:11}).map((_,i)=>(
+        <mesh key={`h${i}`} position={[0, -4.99, (i-5)*4]} rotation={[-Math.PI/2,0,0]}>
+          <planeGeometry args={[80, 0.01]} />
+          <meshBasicMaterial color="#c8ccd8" />
+        </mesh>
+      ))}
+      {Array.from({length:11}).map((_,i)=>(
+        <mesh key={`v${i}`} position={[(i-5)*4, -4.99, 0]} rotation={[-Math.PI/2,0,0]}>
+          <planeGeometry args={[0.01, 80]} />
+          <meshBasicMaterial color="#c8ccd8" />
+        </mesh>
+      ))}
 
-      {/* Carousel */}
-      <group ref={groupRef}>
-        {projects.map((p, i) => (
-          <ExplodedCard key={p.id} project={p} position={[i * CARD_SPACING, 0, 0]} />
-        ))}
-      </group>
-
-      {/* Navigation */}
-      <Html
-        position={[0, isMobile ? -4.0 : -4.5, 0]}
-        transform={false}
-        style={{ pointerEvents: "all" }}
-      >
+      {/* Full HTML UI overlay */}
+      <Html transform={false} style={{ pointerEvents:"none" }}>
         <div style={{
-          display: "flex", gap: isMobile ? 12 : 10,
-          alignItems: "center",
-          fontFamily: "'Space Mono',monospace",
-          background: "rgba(238,240,244,0.9)",
-          padding: isMobile ? "10px 16px" : "8px 14px",
-          borderRadius: 40,
-          border: "1px solid rgba(30,30,60,0.12)",
-          boxShadow: "0 2px 16px rgba(0,0,0,0.1)",
+          position:"fixed", inset:0,
+          display:"flex", flexDirection:"column",
+          pointerEvents:"all",
+          fontFamily:"'Space Mono',monospace",
+          overflowY:"auto",
         }}>
-          <button
-            onClick={() => setIdx(Math.max(0, idx - 1))}
-            disabled={idx === 0}
-            style={{ background: "none", border: "1px solid #9098ac", borderRadius: 4, padding: isMobile ? "6px 14px" : "4px 10px", cursor: idx === 0 ? "default" : "pointer", color: idx === 0 ? "#b0b8c8" : "#1a2030", fontSize: isMobile ? 14 : 11, fontFamily: "inherit" }}
-          >←</button>
+          <style>{`
+            ::-webkit-scrollbar{width:4px}
+            ::-webkit-scrollbar-thumb{background:rgba(80,90,140,0.3);border-radius:2px}
+          `}</style>
 
-          {projects.map((p, i) => (
-            <button key={p.id} onClick={() => setIdx(i)}
-              style={{ width: i === idx ? 28 : isMobile ? 10 : 7, height: isMobile ? 10 : 7, borderRadius: 5, border: "none", background: i === idx ? p.color : "#9098ac", cursor: "pointer", transition: "all 0.3s", padding: 0, boxShadow: i === idx ? `0 0 10px ${p.color}aa` : "none" }}
+          <div style={{ padding: isMobile?"80px 14px 100px":"80px 24px 100px", maxWidth:600, margin:"0 auto", width:"100%" }}>
+
+            {/* Page header */}
+            <div style={{ marginBottom:isMobile?20:24 }}>
+              <div style={{ fontSize:9, letterSpacing:"0.3em", color:"#7880a0", textTransform:"uppercase", marginBottom:6 }}>Deconstruct · Exploded View</div>
+              <div style={{ fontSize:isMobile?20:24, color:"#1a1e2e", fontWeight:700, letterSpacing:"-0.02em", lineHeight:1.2 }}>
+                {IDENTITY.name}
+              </div>
+              <div style={{ fontSize:isMobile?10:9, color:"#8890a8", letterSpacing:"0.08em", marginTop:6 }}>
+                {isMobile ? "Tap layers to inspect · swipe below to navigate" : "Click layers to annotate · use arrows to navigate"}
+              </div>
+            </div>
+
+            {/* Project sheet */}
+            <ProjectSheet
+              project={project}
+              idx={idx}
+              total={projects.length}
+              onClose={() => {}}
+              onPrev={prev}
+              onNext={next}
             />
-          ))}
 
-          <button
-            onClick={() => setIdx(Math.min(projects.length - 1, idx + 1))}
-            disabled={idx === projects.length - 1}
-            style={{ background: "none", border: "1px solid #9098ac", borderRadius: 4, padding: isMobile ? "6px 14px" : "4px 10px", cursor: idx === projects.length - 1 ? "default" : "pointer", color: idx === projects.length - 1 ? "#b0b8c8" : "#1a2030", fontSize: isMobile ? 14 : 11, fontFamily: "inherit" }}
-          >→</button>
+            {/* Navigation */}
+            <div style={{
+              display:"flex", justifyContent:"center",
+              alignItems:"center", gap:isMobile?14:12,
+              marginTop:isMobile?20:18,
+            }}>
+              <button
+                onClick={prev} disabled={idx===0}
+                style={{ fontFamily:"'Space Mono',monospace", background:"#fff", border:"1.5px solid #c8cdd8", borderRadius:10, padding: isMobile?"10px 20px":"8px 16px", cursor:idx===0?"not-allowed":"pointer", color:idx===0?"#c0c8d8":"#1a1e2e", fontSize:isMobile?16:13, boxShadow:"0 2px 8px rgba(0,0,0,0.08)", transition:"all 0.2s", opacity:idx===0?0.4:1 }}
+              >← Prev</button>
 
-          <span style={{ fontSize: isMobile ? 11 : 9, color: "#606878", letterSpacing: "0.1em", marginLeft: 2 }}>
-            {String(idx + 1).padStart(2, "0")} / {String(projects.length).padStart(2, "0")}
-          </span>
+              {/* Dot indicators */}
+              <div style={{ display:"flex", gap:isMobile?10:8, alignItems:"center" }}>
+                {projects.map((p,i)=>(
+                  <button key={p.id} onClick={()=>setIdx(i)} style={{ width:i===idx?(isMobile?28:22):isMobile?11:8, height:isMobile?11:8, borderRadius:6, border:"none", background:i===idx?p.color:"#b0b8cc", cursor:"pointer", transition:"all 0.3s", padding:0, boxShadow:i===idx?`0 0 10px ${p.color}aa`:"none" }} />
+                ))}
+              </div>
+
+              <button
+                onClick={next} disabled={idx===projects.length-1}
+                style={{ fontFamily:"'Space Mono',monospace", background:"#fff", border:"1.5px solid #c8cdd8", borderRadius:10, padding: isMobile?"10px 20px":"8px 16px", cursor:idx===projects.length-1?"not-allowed":"pointer", color:idx===projects.length-1?"#c0c8d8":"#1a1e2e", fontSize:isMobile?16:13, boxShadow:"0 2px 8px rgba(0,0,0,0.08)", transition:"all 0.2s", opacity:idx===projects.length-1?0.4:1 }}
+              >Next →</button>
+            </div>
+
+          </div>
         </div>
       </Html>
     </>
