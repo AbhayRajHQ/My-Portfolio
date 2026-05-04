@@ -1,6 +1,5 @@
-
 // @ts-nocheck
-// ── FILE 7 / 10 : src/components/FluidMotion.jsx ─────────────────
+// ── FILE 7 / 10 : src/components/FluidMotion.jsx  (MOBILE FIXED) ─
 
 import { useRef, useState, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
@@ -8,6 +7,16 @@ import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import useStore from "../store/useThemeStore";
 import { IDENTITY, SKILL_MATRIX, STATUS_META } from "../config/identity";
+
+// ── Responsive breakpoints ────────────────────────────────────────
+const vw       = window.innerWidth;
+const isMobile = vw < 600;
+const isTablet = vw >= 600 && vw < 1024;
+
+const COLS  = isMobile ? 1 : isTablet ? 2 : 3;
+const CARD_W = isMobile ? Math.min(vw - 32, 340) : isTablet ? 280 : 276;
+const GAP    = 12;
+const GRID_W = COLS * CARD_W + (COLS - 1) * GAP;
 
 // ── GLSL Wave Background ──────────────────────────────────────────
 const waveVert = /* glsl */`
@@ -25,7 +34,6 @@ const waveVert = /* glsl */`
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p,1.0);
   }
 `;
-
 const waveFrag = /* glsl */`
   varying vec2 vUv;
   varying float vWave;
@@ -54,7 +62,7 @@ function WaveBackground() {
   });
   return (
     <mesh position={[0, 0, -8]} rotation={[-Math.PI * 0.12, 0, 0]}>
-      <planeGeometry args={[85, 52, 120, 80]} />
+      <planeGeometry args={[85, 52, isMobile ? 40 : 120, isMobile ? 30 : 80]} />
       <shaderMaterial
         ref={matRef}
         vertexShader={waveVert}
@@ -66,10 +74,10 @@ function WaveBackground() {
   );
 }
 
-// ── Project Card with glassmorphism + ripple ──────────────────────
+// ── Project Card ──────────────────────────────────────────────────
 function ProjectCard({ project }) {
-  const setSelected  = useStore((s) => s.setSelectedProject);
-  const sel          = useStore((s) => s.selectedProject);
+  const setSelected   = useStore((s) => s.setSelectedProject);
+  const sel           = useStore((s) => s.selectedProject);
   const [hov, setHov] = useState(false);
   const [ripples, setRipples] = useState([]);
   const cardRef  = useRef();
@@ -80,7 +88,7 @@ function ProjectCard({ project }) {
     !["ADD_LINK_LATER","UNDER_DEVELOPMENT","PLANNING_PHASE"].includes(project.link);
 
   const onMove = (e) => {
-    if (!cardRef.current) return;
+    if (!cardRef.current || isMobile) return;
     const r  = cardRef.current.getBoundingClientRect();
     const id = rippleId.current++;
     setRipples((prev) => [...prev.slice(-2), { id, x: e.clientX - r.left, y: e.clientY - r.top }]);
@@ -95,57 +103,70 @@ function ProjectCard({ project }) {
       onMouseMove={onMove}
       onClick={() => setSelected(isSel ? null : project)}
       style={{
-        position: "relative", overflow: "hidden", borderRadius: 16,
-        padding: "20px 22px", cursor: "pointer",
+        position: "relative", overflow: "hidden",
+        borderRadius: 14, padding: "18px 18px",
+        cursor: "pointer", width: CARD_W,
         background: hov || isSel
-          ? `linear-gradient(135deg,${project.color}22 0%,rgba(0,212,255,0.08) 100%)`
-          : "rgba(255,255,255,0.04)",
-        backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
-        border: `1px solid ${isSel ? project.color : hov ? project.color + "55" : "rgba(255,255,255,0.08)"}`,
+          ? `linear-gradient(135deg,${project.color}28 0%,rgba(0,212,255,0.1) 100%)`
+          : "rgba(255,255,255,0.05)",
+        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        border: `1px solid ${isSel ? project.color : hov ? project.color+"66" : "rgba(255,255,255,0.1)"}`,
         boxShadow: isSel
           ? `0 0 0 1px ${project.color}44, 0 8px 40px ${project.color}22`
-          : hov ? `0 4px 24px ${project.color}18` : "0 2px 12px rgba(0,0,0,0.3)",
+          : hov ? `0 4px 20px ${project.color}18` : "0 2px 10px rgba(0,0,0,0.3)",
         transition: "all 0.35s cubic-bezier(0.23,1,0.32,1)",
-        transform: isSel ? "scale(1.02)" : hov ? "translateY(-3px)" : "translateY(0)",
+        transform: isSel ? "scale(1.01)" : hov ? "translateY(-2px)" : "translateY(0)",
         fontFamily: "'Space Mono',monospace",
       }}
     >
-      {/* Ripple circles */}
+      {/* Ripples */}
       {ripples.map((r) => (
         <span key={r.id} style={{ position: "absolute", left: r.x, top: r.y, width: 0, height: 0, borderRadius: "50%", background: `${project.color}28`, transform: "translate(-50%,-50%)", animation: "ripple 0.9s ease-out forwards", pointerEvents: "none" }} />
       ))}
 
       <div style={{ position: "relative", zIndex: 1 }}>
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <div style={{ fontSize: 7, letterSpacing: "0.2em", color: project.color, textTransform: "uppercase", padding: "2px 7px", border: `1px solid ${project.color}44`, borderRadius: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ fontSize: 8, letterSpacing: "0.16em", color: project.color, textTransform: "uppercase", padding: "3px 8px", border: `1px solid ${project.color}44`, borderRadius: 20 }}>
             {project.category}
           </div>
-          <div style={{ fontSize: 7, color: badge.color, letterSpacing: "0.12em" }}>{badge.label}</div>
+          <div style={{ fontSize: 8, color: badge.color, letterSpacing: "0.1em", flexShrink: 0 }}>{badge.label}</div>
         </div>
 
-        <h3 style={{ fontSize: 14, color: "#fff", marginBottom: 7, lineHeight: 1.25, letterSpacing: "-0.01em" }}>
+        {/* Title */}
+        <h3 style={{ fontSize: isMobile ? 15 : 14, color: "#fff", marginBottom: 8, lineHeight: 1.3, letterSpacing: "-0.01em" }}>
           {project.title}
         </h3>
 
-        <p style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", lineHeight: 1.75, marginBottom: 12, display: isSel ? "block" : "-webkit-box", WebkitLineClamp: isSel ? "unset" : 2, WebkitBoxOrient: "vertical", overflow: isSel ? "visible" : "hidden" }}>
+        {/* Description */}
+        <p style={{
+          fontSize: isMobile ? 11 : 9,
+          color: "rgba(255,255,255,0.6)",
+          lineHeight: 1.75, marginBottom: 12,
+          display: isSel ? "block" : "-webkit-box",
+          WebkitLineClamp: isSel ? "unset" : 3,
+          WebkitBoxOrient: "vertical",
+          overflow: isSel ? "visible" : "hidden",
+        }}>
           {project.description}
         </p>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {/* Tech pills */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
           {project.tech.map((t) => (
-            <span key={t} style={{ fontSize: 7, color: "rgba(255,255,255,0.4)", padding: "2px 6px", background: "rgba(255,255,255,0.05)", borderRadius: 4, border: "1px solid rgba(255,255,255,0.08)" }}>{t}</span>
+            <span key={t} style={{ fontSize: isMobile ? 9 : 7.5, color: "rgba(255,255,255,0.5)", padding: "3px 8px", background: "rgba(255,255,255,0.06)", borderRadius: 5, border: "1px solid rgba(255,255,255,0.1)" }}>{t}</span>
           ))}
         </div>
 
+        {/* Expanded section */}
         {isSel && (
-          <div style={{ marginTop: 14 }}>
-            <div style={{ fontSize: 8, color: "rgba(255,255,255,0.3)", lineHeight: 1.65, borderLeft: `2px solid ${project.color}44`, paddingLeft: 10, marginBottom: 12 }}>
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: isMobile ? 10 : 8, color: "rgba(255,255,255,0.38)", lineHeight: 1.7, borderLeft: `2px solid ${project.color}44`, paddingLeft: 10, marginBottom: 14 }}>
               {project.layers.logic}
             </div>
             {hasLink
-              ? <a href={project.link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 8, color: project.color, textDecoration: "none", letterSpacing: "0.15em", textTransform: "uppercase", borderBottom: `1px solid ${project.color}66`, paddingBottom: 2 }}>View Project →</a>
-              : <span style={{ fontSize: 8, color: "rgba(255,255,255,0.25)", letterSpacing: "0.12em", textTransform: "uppercase" }}>{project.status === "IN_PROGRESS" ? "In Development" : "Coming Soon"}</span>
+              ? <a href={project.link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: isMobile ? 11 : 9, color: project.color, textDecoration: "none", letterSpacing: "0.12em", textTransform: "uppercase", borderBottom: `1px solid ${project.color}66`, paddingBottom: 2 }}>View Project →</a>
+              : <span style={{ fontSize: isMobile ? 10 : 8, color: "rgba(255,255,255,0.28)", letterSpacing: "0.1em", textTransform: "uppercase" }}>{project.status === "IN_PROGRESS" ? "In Development" : "Coming Soon"}</span>
             }
           </div>
         )}
@@ -154,29 +175,30 @@ function ProjectCard({ project }) {
   );
 }
 
-// ── Skill matrix row ──────────────────────────────────────────────
+// ── Skill row ─────────────────────────────────────────────────────
 function SkillGroup({ g }) {
   return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
-        <div style={{ fontSize: 7, letterSpacing: "0.2em", color: g.color, textTransform: "uppercase", fontFamily: "'Space Mono',monospace" }}>{g.domain}</div>
-        <div style={{ flex: 1, height: 1, background: `${g.color}30` }} />
-        <div style={{ fontSize: 6.5, color: g.color, padding: "2px 6px", border: `1px solid ${g.color}40`, borderRadius: 10, fontFamily: "'Space Mono',monospace", letterSpacing: "0.1em" }}>{g.tier}</div>
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+        <div style={{ fontSize: isMobile ? 9 : 7.5, letterSpacing: "0.18em", color: g.color, textTransform: "uppercase", fontFamily: "'Space Mono',monospace" }}>{g.domain}</div>
+        <div style={{ flex: 1, minWidth: 20, height: 1, background: `${g.color}30` }} />
+        <div style={{ fontSize: isMobile ? 8 : 6.5, color: g.color, padding: "2px 7px", border: `1px solid ${g.color}40`, borderRadius: 10, fontFamily: "'Space Mono',monospace", letterSpacing: "0.1em", whiteSpace: "nowrap" }}>{g.tier}</div>
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {g.skills.map((s) => (
-          <span key={s} style={{ fontFamily: "'Space Mono',monospace", fontSize: 7.5, padding: "3px 9px", background: `${g.color}12`, border: `1px solid ${g.color}35`, borderRadius: 4, color: "rgba(255,255,255,0.68)", whiteSpace: "nowrap" }}>{s}</span>
+          <span key={s} style={{ fontFamily: "'Space Mono',monospace", fontSize: isMobile ? 10 : 8, padding: "4px 10px", background: `${g.color}12`, border: `1px solid ${g.color}35`, borderRadius: 5, color: "rgba(255,255,255,0.72)", whiteSpace: "nowrap" }}>{s}</span>
         ))}
       </div>
     </div>
   );
 }
 
-// ── FluidMotion scene root ────────────────────────────────────────
+// ── FluidMotion root ──────────────────────────────────────────────
 export default function FluidMotion() {
   const projects = useStore((s) => s.projects);
-  const cols = 3, cardW = 276, gapX = 16, gapY = 14;
-  const totalW = cols * cardW + (cols - 1) * gapX;
+
+  // Calculate the distanceFactor to make content fill the screen nicely
+  const df = isMobile ? 6 : isTablet ? 12 : 18;
 
   return (
     <>
@@ -185,27 +207,66 @@ export default function FluidMotion() {
       <WaveBackground />
       <fogExp2 attach="fog" color="#020c1a" density={0.018} />
 
-      {/* Project grid */}
-      <Html position={[0, 1.6, 0]} transform={false} style={{ width: totalW, pointerEvents: "all" }} distanceFactor={18}>
-        <style>{`@keyframes ripple{0%{width:0;height:0;opacity:.6}100%{width:290px;height:290px;opacity:0}}`}</style>
+      {/* ── Project grid — centred HTML overlay ────────────────── */}
+      <Html
+        center
+        position={[0, isMobile ? 2.5 : 1.6, 0]}
+        transform={false}
+        distanceFactor={df}
+        style={{
+          width: GRID_W,
+          pointerEvents: "all",
+          // Force centre on all screens
+          position: "fixed",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -54%)",
+          maxHeight: isMobile ? "60vh" : "65vh",
+          overflowY: "auto",
+          paddingBottom: 8,
+        }}
+      >
+        <style>{`
+          @keyframes ripple{0%{width:0;height:0;opacity:.6}100%{width:290px;height:290px;opacity:0}}
+          ::-webkit-scrollbar{width:3px}
+          ::-webkit-scrollbar-thumb{background:rgba(0,212,255,0.3);border-radius:2px}
+        `}</style>
 
-        <div style={{ fontFamily: "'Space Mono',monospace", textAlign: "center", marginBottom: 22 }}>
-          <div style={{ fontSize: 8, letterSpacing: "0.35em", color: "#00d4ff88", textTransform: "uppercase", marginBottom: 5 }}>Selected Work</div>
-          <div style={{ fontSize: 20, color: "#fff", letterSpacing: "-0.02em" }}>{IDENTITY.name}</div>
-          <div style={{ fontSize: 8, color: "rgba(255,255,255,0.28)", letterSpacing: "0.1em", marginTop: 5 }}>{IDENTITY.tagline}</div>
+        {/* Header */}
+        <div style={{ fontFamily: "'Space Mono',monospace", textAlign: "center", marginBottom: isMobile ? 16 : 22, paddingTop: 8 }}>
+          <div style={{ fontSize: isMobile ? 10 : 8, letterSpacing: "0.3em", color: "#00d4ff99", textTransform: "uppercase", marginBottom: 6 }}>Selected Work</div>
+          <div style={{ fontSize: isMobile ? 22 : 20, color: "#fff", letterSpacing: "-0.02em", fontWeight: 700 }}>{IDENTITY.name}</div>
+          <div style={{ fontSize: isMobile ? 10 : 8, color: "rgba(255,255,255,0.32)", letterSpacing: "0.08em", marginTop: 6, lineHeight: 1.5 }}>{IDENTITY.tagline}</div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, ${cardW}px)`, gap: `${gapY}px ${gapX}px` }}>
+        {/* Cards */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${COLS}, ${CARD_W}px)`,
+          gap: `${GAP}px`,
+          justifyContent: "center",
+        }}>
           {projects.map((p) => <ProjectCard key={p.id} project={p} />)}
         </div>
       </Html>
 
-      {/* Skill matrix */}
-      <Html position={[0, -3.4, 0]} transform={false} style={{ width: totalW, pointerEvents: "none" }} distanceFactor={18}>
-        <div style={{ background: "rgba(2,12,26,0.80)", backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: "1px solid rgba(0,212,255,0.12)", borderRadius: 14, padding: "18px 22px", marginTop: 14 }}>
-          <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 7.5, letterSpacing: "0.3em", color: "#00d4ff88", textTransform: "uppercase", marginBottom: 14 }}>Skill Matrix</div>
+      {/* ── Skill matrix — bottom overlay ──────────────────────── */}
+      <Html
+        center
+        transform={false}
+        style={{
+          width: Math.min(GRID_W, vw - 24),
+          pointerEvents: "none",
+          position: "fixed",
+          bottom: isMobile ? 60 : 28,
+          left: "50%",
+          transform: "translateX(-50%)",
+        }}
+      >
+        <div style={{ background: "rgba(2,12,26,0.88)", backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: "1px solid rgba(0,212,255,0.15)", borderRadius: 14, padding: isMobile ? "16px 16px" : "18px 22px" }}>
+          <div style={{ fontFamily: "'Space Mono',monospace", fontSize: isMobile ? 9 : 7.5, letterSpacing: "0.28em", color: "#00d4ff88", textTransform: "uppercase", marginBottom: isMobile ? 14 : 12 }}>Skill Matrix</div>
           {SKILL_MATRIX.map((g) => <SkillGroup key={g.domain} g={g} />)}
-          <div style={{ marginTop: 8, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)", fontFamily: "'Space Mono',monospace", fontSize: 7.5, color: "rgba(255,255,255,0.28)", letterSpacing: "0.1em" }}>
+          <div style={{ marginTop: 8, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.07)", fontFamily: "'Space Mono',monospace", fontSize: isMobile ? 9 : 7.5, color: "rgba(255,255,255,0.3)", letterSpacing: "0.08em" }}>
             ⚡ {IDENTITY.fitness.philosophy} · {IDENTITY.fitness.focus}
           </div>
         </div>
